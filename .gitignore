@@ -1,0 +1,12 @@
+# Binaries and build output
+/campuspulse
+/csci_6221
+*.test
+*.out
+*.prof
+coverage.html
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/

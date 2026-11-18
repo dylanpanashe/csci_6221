@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>CampusPulse (Stage 1)</title>
+<style>body{font-family:system-ui;background:#0b1220;color:#dbe7ff;padding:2rem}code{color:#5eead4}</style></head>
+<body>
+<h1>CampusPulse</h1>
+<p>Stage 1 placeholder. The 3D campus arrives in Stage 5.</p>
+<pre id="out">Loading /api/campus…</pre>
+<script>
+fetch('/api/campus').then(r => r.json()).then(c => {
+  const lines = c.buildings.map(b => `${b.name}: ${b.floors.length} floors, ` +
+    `${b.floors.reduce((n, f) => n + f.rooms.length, 0)} rooms, ` +
+    `${b.floors.reduce((n, f) => n + f.access_points.length, 0)} APs`);
+  document.getElementById('out').textContent = lines.join('\n');
+});
+</script>
+</body></html>
