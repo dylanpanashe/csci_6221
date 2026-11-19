@@ -17,18 +17,49 @@ type Clock interface {
 	Now() time.Time
 }
 
-// ObservationSource produces Wi-Fi association records. Stream writes into a
-// send-only channel and returns when ctx is cancelled. The caller owns the
-// channel and closes it after Stream returns, so a source can never cause a
-// send-on-closed-channel panic.
-type ObservationSource interface {
-	Stream(ctx context.Context, out chan<- WiFiObservation) error
+// Feeds are the send-only output channels a campus data source writes to.
+// The pipeline creates and owns them and closes them after the source's Run
+// returns, so a source can never cause a send-on-closed-channel panic.
+type Feeds struct {
+	Observations chan<- ObservationBatch
+	Telemetry    chan<- TelemetryBatch
+	Frames       chan<- SimFrame
 }
 
-// TelemetrySource produces periodic AP health samples, with the same
-// ownership contract as ObservationSource.
-type TelemetrySource interface {
-	StreamTelemetry(ctx context.Context, out chan<- APTelemetry) error
+// CampusSource produces Wi-Fi observations, AP telemetry and activity frames
+// until ctx is cancelled. The simulator implements it; tests use a scripted
+// fake. A future adapter for a real Wi-Fi controller would implement it too.
+type CampusSource interface {
+	Run(ctx context.Context, out Feeds) error
+}
+
+// MovementFlow is an aggregated movement between two spaces during a tick,
+// used to animate people in the 3D campus. It is never per-person.
+type MovementFlow struct {
+	From     RoomID         `json:"from"` // "" means off campus
+	To       RoomID         `json:"to"`
+	Outdoors bool           `json:"outdoors"`
+	Count    OccupancyCount `json:"count"`
+}
+
+// TimetableTransition says an event has started or ended during a tick.
+type TimetableTransition struct {
+	Event   TimetableEvent `json:"event"`
+	Started bool           `json:"started"` // false means ended
+}
+
+// SimFrame is the per-tick summary of simulator activity that is safe to
+// share: timing, controls, aggregated flows and timetable transitions.
+// It never contains true headcounts.
+type SimFrame struct {
+	Seq         uint64                `json:"seq"`
+	At          time.Time             `json:"at"`
+	Speed       float64               `json:"speed"`
+	Paused      bool                  `json:"paused"`
+	Activity    float64               `json:"activity"`
+	Flows       []MovementFlow        `json:"flows"`
+	Transitions []TimetableTransition `json:"transitions"`
+	Observed    int                   `json:"observations"`
 }
 
 // Timetable answers questions about scheduled events.

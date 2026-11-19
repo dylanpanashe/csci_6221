@@ -233,13 +233,44 @@ func (e TimetableEvent) ActiveAt(t time.Time) bool {
 // the raw device identifier: the privacy filter replaces it before anything
 // leaves the ingest stage. RawDeviceID only exists inside the simulator and
 // the first pipeline stage, and is tagged so it is never serialised.
+//
+// NearestRoom is the room the controller's location service places the
+// device in. Like a real location engine it is sometimes wrong (signal leaks
+// through walls), which is one reason device counts are only estimates.
 type WiFiObservation struct {
 	RawDeviceID string         `json:"-"`
-	DeviceHash  string         `json:"-"`
+	DeviceHash  DeviceHash     `json:"-"`
 	AccessPoint AccessPointID  `json:"ap_id"`
+	NearestRoom RoomID         `json:"-"`
 	Signal      SignalStrength `json:"signal"`
 	Connected   bool           `json:"connected"`
 	At          time.Time      `json:"at"`
+}
+
+// DeviceHash is a truncated keyed hash of a device identifier. It is a
+// fixed-size array rather than a string, so it is comparable (usable as a
+// map key) and costs no heap allocation per observation.
+type DeviceHash [16]byte
+
+// IsZero reports whether the hash has not been set yet.
+func (h DeviceHash) IsZero() bool { return h == DeviceHash{} }
+
+// ObservationBatch is a chunk of observations from one simulation tick.
+// Total is the number of batches in the tick, so the aggregator knows when
+// it has seen them all, whatever order the worker pool returns them in.
+type ObservationBatch struct {
+	Seq          uint64
+	At           time.Time
+	Index, Total int
+	Observations []WiFiObservation
+}
+
+// TelemetryBatch is every AP health sample from one tick. A failed AP sends
+// nothing, just like real hardware, so failures show up as silence.
+type TelemetryBatch struct {
+	Seq     uint64
+	At      time.Time
+	Samples []APTelemetry
 }
 
 // APTelemetry is a periodic health sample from an AP.
@@ -287,7 +318,7 @@ func (e OccupancyEstimate) Available() OccupancyCount {
 
 // ForecastPoint is the prediction for one horizon.
 type ForecastPoint struct {
-	Horizon    time.Duration  `json:"horizon"`
+	Horizon    time.Duration  `json:"-"`
 	Minutes    int            `json:"minutes"`
 	At         time.Time      `json:"at"`
 	Count      OccupancyCount `json:"count"`
@@ -328,8 +359,10 @@ type Alert struct {
 	AffectedRooms []RoomID      `json:"affected_rooms,omitempty"`
 	RaisedAt      time.Time     `json:"raised_at"`
 	ResolvedAt    *time.Time    `json:"resolved_at,omitempty"`
-	// DetectionDelay is how long after the (simulated) fault the alert fired.
-	DetectionDelay time.Duration `json:"detection_delay,omitempty"`
+	// DetectionDelay is how long after the AP's last heartbeat the alert
+	// fired. DetectionMinutes is the same value for JSON clients.
+	DetectionDelay   time.Duration `json:"-"`
+	DetectionMinutes float64       `json:"detection_minutes,omitempty"`
 }
 
 // Active reports whether the alert is still open.
